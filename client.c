@@ -18,9 +18,11 @@ int main(int argc, char *argv[]) {
         fprintf(stderr, "usage: ./client option");
         return 1;
     }
-
+    char pid[32];
+    snprintf(pid, 32, "%d", getpid());
     char buffer[256];
-    buffer[0] = '\0';
+    strcpy(buffer, pid);
+    strcat(buffer, " ");
 
     for (int i = 1; i < argc - 1; i++) {
         strcat(buffer, argv[i]);
@@ -31,5 +33,12 @@ int main(int argc, char *argv[]) {
     strcat(buffer, "\n");
     write(fd, buffer, strlen(buffer) + 1);
     close(fd);
+    mkfifo(pid, 0666);
+    fd = open(pid, O_RDONLY);
+    int n;
+    while ((n = read(fd, buffer, 16)) > 0)
+        write(1, buffer, n);
+    close (fd);
+    unlink(pid);
     return 0;
 }

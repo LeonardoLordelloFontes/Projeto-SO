@@ -9,8 +9,10 @@
 #include <signal.h>
 #include "queue.h"
 
-/* Perfect Hash
+int server_transformations[7][2];
+PriorityQueue PQueue;
 
+/* Perfect Hash
     nop - 4
     bcompress - 1
     bdecompress - 2
@@ -18,12 +20,9 @@
     gdecompress - 0
     encrypt - 3
     decrypt - 5
-
 */
 
-int server_transformations[7][2];
-
-int transformation_key(char* str) {
+int get_transformation_key(char* str) {
     int key = (str[0] + str[1]) % 7;
     if (str[0] == 'e') 
         key += 2;
@@ -48,6 +47,107 @@ int accept_user_request(int user_transformations[7]) {
     return accepted;
 }
 
+int skip_request_to_transformations(char *request) {
+    char buffer[strlen(request) + 1];
+    strcpy(buffer, request);
+    int skip = 0;
+    char *token = strtok(buffer, " "); // proc-file
+    skip += strlen(token) + 1;
+    token = strtok(NULL, " "); // -p ou output
+    skip += strlen(token) + 1;
+    if (strcmp(token, "-p") == 0) {
+        token = strtok(NULL, " "); // priority
+        skip += strlen(token) + 1;
+        token = strtok(NULL, " "); // output
+        skip += strlen(token) + 1;
+    }
+    token = strtok(NULL, " "); // input
+    skip += strlen(token) + 1;
+    return skip;
+}
+
+void fill_user_transformations(char *request, int user_transformations[7]) {
+    int skip = skip_request_to_transformations(request);
+    for (char *token = strtok(request + skip, " "); token != NULL; token = strtok(NULL, " ")) {
+        user_transformations[get_transformation_key(token)]++;
+    }
+}
+
+void select_task(char *request, int request_id) {
+    char buffer[strlen(request) + 1]; 
+    strcpy(buffer, request);
+    char *token = strtok(buffer, " ");
+    char request_pid[16];
+    strcpy(request_pid, token);
+    int skip_pid = strlen(token) + 1;
+    token = strtok(NULL, " ");
+
+    if (strcmp(token, "proc-file") == 0) {
+        proc_file_task(request + skip_pid, request_id, request_pid);
+    }
+
+    else if (strcmp(token, "status") == 0) {
+        // TODO
+        status_task();
+    }
+}
+
+int get_task_priority(const char *request) {
+    int priority = 0;
+    char buffer[strlen(request) + 1];
+    strcpy(buffer, request);
+    char *token = strtok(buffer, " ");
+    token = strtok(NULL, " ");
+    if (strcmp(token, "-p") == 0) {
+        token = strtok(NULL, " ");
+        priority = atoi(token);
+        if (priority > 5) priority = 5;
+    }
+    return priority;
+}
+
+void proc_file_task(char *request, int request_id, char *request_pid) {
+    Task task = {.transformations = {0}};
+    fill_user_transformations(request, task.transformations);
+    if (accept_user_request(task.transformations)) {
+
+        int fd = open(request_pid, O_WRONLY);
+        if (fd == -1)
+            perror("open");
+        // write(1, "a", 1);
+        write(fd, "PENDING", 8);
+        close(fd);
+        if (isEmpty(PQueue) && check_transformations_availableness(task.transformations)) {
+            int skip = skip_request_to_transformations(request);
+            process_transformations(request + skip);
+        }
+        else {
+            task.priority = get_task_priority(request);
+            task.request_id = request_id;
+            strcpy(task.request_pid, request_pid);
+            strcpy(task.request, request);
+            enqueue(PQueue, task);
+        }
+    }
+    else {
+        // PEDIDO RECUSADO
+        // ENVIAR MENSAGEM AO CLIENTE DIZENDO "DENIED"
+        write(1, "NO", 2); 
+    }
+    // olhar para o topo e dar dequeue enquanto estiver disponivel 
+}
+
+void process_transformations(char *transformations) {
+    pid_t pid = fork();
+    if (pid == 0) {
+        // TODO
+    }
+}
+
+void status_task() {
+    // TODO
+}
+
 // testado
 
 void max_runnable_transformations(char* config_path) {
@@ -64,7 +164,7 @@ void max_runnable_transformations(char* config_path) {
     } 
     close(fd);
     for (char *token = strtok(buffer, " \n"); token != NULL; token = strtok(NULL, " \n")) {
-        int key = transformation_key(token);
+        int key = get_transformation_key(token);
         token = strtok(NULL, " \n");
         server_transformations[key][0] = 0; // running 
         server_transformations[key][1] = atoi(token); // max
@@ -73,135 +173,24 @@ void max_runnable_transformations(char* config_path) {
 
 ssize_t read_request(int fd, char* request, size_t size) {
     ssize_t bytes_read = read(fd, request, size);
-    size_t request_size = strcspn(request, "\n") + 1;
+    size_t request_size = strcspn(request, "\n");
     request[request_size] = '\0';
     lseek(fd, request_size - bytes_read, SEEK_CUR);
     return request_size;
 }
 
 int main(int argc, char *argv[]) {
-
     max_runnable_transformations(argv[1]);
     mkfifo("server_client_fifo", 0666);
-    char buffer[256];
-
+    initQueue(PQueue);
+    char request[256];
+    int requests = 0;
     while (1) {
         int fd = open("server_client_fifo", O_RDONLY);
-        int n = read_request(fd, buffer, 256);
-        // int aux, n = 0;
-        // while ((aux = read_request(fd, buffer, 256)) > 0) n += aux;
+        int n = read_request(fd, request, 256);
         close(fd);
-        long x;
-        for (int i = 0; i < 1000000000; i++)
-            x += i;
-        write(1, buffer, n);
-        // strncpy(user_request, buffer, n);
-        //write(1, user_request, n);
-        // if (n <= 255)
-        // write(1, buffer, n);
-        /*else
-            write(1, "arroz", 5);*/
+        requests++;
+        select_task(request, requests);
     }
-
-    /*
-    int fds[2];
-    pipe(fds);
-    pid_t pid3 = fork();
-    if (pid3 == 0) {
-        close(fds[0]);
-        int fd = open("server_client_fifo", O_RDONLY);
-        while (1) {
-            char buffer[256];
-            int n = read(fd, buffer, 256);
-            write(fds[1], buffer, n);
-        }
-    }
-
-    int clients = 0;
-    while(1) {
-        int fd = open("server_client_fifo", O_RDONLY);
-        char buffer[256];
-        char buffer2[256];
-        int n = read(fd, buffer, 256);
-        close(fd);
-        clients++;
-        write(1, buffer, n);
-        // sprintf(buffer2, "%d", clients);
-        //write(1, buffer2, strlen(buffer2));
-    
-    
-    int fds2[2];
-    pipe(fds2);
-
-    while(1) {
-        pid_t pid1 = fork();
-        if (pid1 == 0) {
-            close(fds[0]);
-            close(fds[1]);
-            close(fds2[0]);
-            int y = 3;
-            char buffer4[64];
-            sprintf(buffer4, "%d", y);
-            write(fds2[1], buffer4, strlen(buffer4));
-            close(fds2[1]);
-            _exit(1);
-        }
-        char buffer2[256];
-        char buffer3[32];
-    
-        int n3 = read(fds2[0], buffer3, 32);
-        int x = atoi(buffer3);
-        printf("%d", x);
-        // write(1, buffer3, n3);
-        int n2 = read(fds[0], buffer2, 256);
-        write(1, buffer2, n2);
-        pid_t pid2 = fork();
-        if (pid2 == 0) {
-            kill(getpid(), SIGSTOP);
-            write(1, "TODO", 4);
-            _exit(0);
-        }
-    }
-
-    waitpid(pid3, NULL, 0);
-
-    while(1) {
-        pid_t queue_process = fork();
-
-        if (queue_process == -1) {
-            perror("fork");
-            return 1;
-        }
-
-        if (queue_process == 0) {
-            sleep(2);
-            write(1, "arroz", 5);
-            _exit(1);
-        }
-
-        pid_t client_process = fork();
-
-        if (client_process == -1) {
-            perror("fork");
-            return 1;
-        }
-
-        if (client_process == 0) {
-            clients++;
-            int fd = open("server_client_fifo", O_RDONLY);
-            char buffer[256];
-            int n = read(fd, buffer, 256);
-            close(fd);
-            write(fds[1], buffer, n);
-            _exit(0);
-        }
-
-        if (fork() == 0) {
-
-            _exit(0);
-        }
-
-        waitpid(queue_process, NULL, 0);
-    }*/
     return 0;
 }

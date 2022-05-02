@@ -8,9 +8,9 @@ client: client.o
 
 client.o: client.c
 
-server: server.o
+server: server.o queue.o
 
-server.o: server.c
+server.o: server.c queue.c
 
 clean:
 	+$(MAKE) -C SDStore-transf clean
