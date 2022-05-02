@@ -7,6 +7,9 @@
 #include <sys/stat.h>
 
 int main(int argc, char *argv[]) {
+    char pid[32];
+    snprintf(pid, 32, "%d", getpid());
+    mkfifo(pid, 0666);
     
     int fd = open("server_client_fifo", O_WRONLY);
     if (fd == -1) {
@@ -18,8 +21,7 @@ int main(int argc, char *argv[]) {
         fprintf(stderr, "usage: ./client option");
         return 1;
     }
-    char pid[32];
-    snprintf(pid, 32, "%d", getpid());
+   
     char buffer[256];
     strcpy(buffer, pid);
     strcat(buffer, " ");
@@ -33,12 +35,18 @@ int main(int argc, char *argv[]) {
     strcat(buffer, "\n");
     write(fd, buffer, strlen(buffer) + 1);
     close(fd);
-    mkfifo(pid, 0666);
-    fd = open(pid, O_RDONLY);
-    int n;
-    while ((n = read(fd, buffer, 16)) > 0)
-        write(1, buffer, n);
-    close (fd);
+
+    int client_server_fd = open(pid, O_RDONLY);
+
+    if (client_server_fd == -1) {
+        perror("open");
+        return 1;
+    }
+
+    char buffer2[32];
+    int n = read(client_server_fd, buffer2, 32);
+    write(1, buffer2, n);
+    close(client_server_fd);
     unlink(pid);
     return 0;
 }

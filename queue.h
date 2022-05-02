@@ -15,10 +15,10 @@ typedef struct {
     int size;
 } PriorityQueue;
 
-void initQueue(PriorityQueue q);
-void enqueue(PriorityQueue q, Task task);
-Task dequeue(PriorityQueue q);
-int* peak_transformations(PriorityQueue q);
-int isEmpty(PriorityQueue q);
+void initQueue();
+void enqueue(Task task);
+Task dequeue();
+int* peak_transformations();
+int isEmpty();
 
 #endif

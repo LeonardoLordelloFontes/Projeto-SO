@@ -8,9 +8,9 @@
 #include <sys/wait.h>
 #include <signal.h>
 #include "queue.h"
+#include "server.h"
 
 int server_transformations[7][2];
-PriorityQueue PQueue;
 
 /* Perfect Hash
     nop - 4
@@ -27,6 +27,21 @@ int get_transformation_key(char* str) {
     if (str[0] == 'e') 
         key += 2;
     return key;
+}
+
+int get_task_priority(const char *request) {
+    int priority = 0;
+    char buffer[strlen(request) + 1];
+    strcpy(buffer, request);
+    char *token = strtok(buffer, " ");
+    token = strtok(NULL, " ");
+    if (strcmp(token, "-p") == 0) {
+        token = strtok(NULL, " ");
+        priority = atoi(token);
+        if (priority < 0) priority = 0;
+        else if (priority > 5) priority = 5;
+    }
+    return priority;
 }
 
 int check_transformations_availableness(int user_transformations[7]) {
@@ -73,11 +88,55 @@ void fill_user_transformations(char *request, int user_transformations[7]) {
     }
 }
 
+void status_task() {
+    // TODO
+}
+
+void process_transformations(char *transformations) {
+    pid_t pid = fork();
+    if (pid == 0) {
+        // TODO
+        _exit(1);
+    }
+}
+
+void proc_file_task(char *request, int request_id, char *request_pid) {
+    Task task = {.transformations = {0}};
+    fill_user_transformations(request, task.transformations);
+    int client_server_fd = open(request_pid, O_WRONLY);
+    if (client_server_fd == -1) {
+        perror("open");
+        return 1;
+    }
+    if (accept_user_request(task.transformations)) {
+        write(client_server_fd, "PENDING", 7);
+        close(client_server_fd);
+        if (isEmpty()) {
+            int skip = skip_request_to_transformations(request);
+            process_transformations(request + skip);
+        }
+        else {
+            task.priority = get_task_priority(request);
+            task.request_id = request_id;
+            strcpy(task.request_pid, request_pid);
+            strcpy(task.request, request);
+            enqueue(task);
+        }
+    }
+    else {
+        // PEDIDO RECUSADO
+        // ENVIAR MENSAGEM AO CLIENTE DIZENDO "DENIED"
+        write(1, "NO", 2); 
+    }
+
+    // olhar para o topo e dar dequeue enquanto estiver disponivel 
+}
+
 void select_task(char *request, int request_id) {
     char buffer[strlen(request) + 1]; 
     strcpy(buffer, request);
     char *token = strtok(buffer, " ");
-    char request_pid[16];
+    char request_pid[32];
     strcpy(request_pid, token);
     int skip_pid = strlen(token) + 1;
     token = strtok(NULL, " ");
@@ -90,62 +149,6 @@ void select_task(char *request, int request_id) {
         // TODO
         status_task();
     }
-}
-
-int get_task_priority(const char *request) {
-    int priority = 0;
-    char buffer[strlen(request) + 1];
-    strcpy(buffer, request);
-    char *token = strtok(buffer, " ");
-    token = strtok(NULL, " ");
-    if (strcmp(token, "-p") == 0) {
-        token = strtok(NULL, " ");
-        priority = atoi(token);
-        if (priority > 5) priority = 5;
-    }
-    return priority;
-}
-
-void proc_file_task(char *request, int request_id, char *request_pid) {
-    Task task = {.transformations = {0}};
-    fill_user_transformations(request, task.transformations);
-    if (accept_user_request(task.transformations)) {
-
-        int fd = open(request_pid, O_WRONLY);
-        if (fd == -1)
-            perror("open");
-        // write(1, "a", 1);
-        write(fd, "PENDING", 8);
-        close(fd);
-        if (isEmpty(PQueue) && check_transformations_availableness(task.transformations)) {
-            int skip = skip_request_to_transformations(request);
-            process_transformations(request + skip);
-        }
-        else {
-            task.priority = get_task_priority(request);
-            task.request_id = request_id;
-            strcpy(task.request_pid, request_pid);
-            strcpy(task.request, request);
-            enqueue(PQueue, task);
-        }
-    }
-    else {
-        // PEDIDO RECUSADO
-        // ENVIAR MENSAGEM AO CLIENTE DIZENDO "DENIED"
-        write(1, "NO", 2); 
-    }
-    // olhar para o topo e dar dequeue enquanto estiver disponivel 
-}
-
-void process_transformations(char *transformations) {
-    pid_t pid = fork();
-    if (pid == 0) {
-        // TODO
-    }
-}
-
-void status_task() {
-    // TODO
 }
 
 // testado
@@ -182,7 +185,7 @@ ssize_t read_request(int fd, char* request, size_t size) {
 int main(int argc, char *argv[]) {
     max_runnable_transformations(argv[1]);
     mkfifo("server_client_fifo", 0666);
-    initQueue(PQueue);
+    initQueue();
     char request[256];
     int requests = 0;
     while (1) {

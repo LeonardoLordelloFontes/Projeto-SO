@@ -1,18 +1,18 @@
 #include <stdlib.h>
 #include <string.h>
 #include "queue.h"
+#include "server.h"
 
 void swap_task(Task t[], int pos1, int pos2) {
-    Task aux =  t[pos1];
+    Task aux = t[pos1];
     t[pos1] = t[pos2];
     t[pos2] = aux;
 }
 
 void bubbleUp (Task t[], int i) {
     int p = (i-1)/2;
-    while (i > 0) {
-        if (t[i].priority > t[p].priority || (t[i].priority == t[p].priority && t[i].request_id < t[p].request_id))
-            swap_task(t, i, p);
+    while (i > 0 && t[i].priority > t[p].priority || (t[i].priority == t[p].priority && t[i].request_id < t[p].request_id)) {
+        swap_task(t, i, p);
         i = p;
         p = (i-1)/2;
     }
@@ -20,24 +20,22 @@ void bubbleUp (Task t[], int i) {
 
 void bubbleDown (Task t[], int i, int N) {
     int c = 2*i + 1;
-    while (c < N) {
-        if (t[c].priority >= t[i].priority) {
-            if (c + 1 < N && (t[c + 1].priority > t[c].priority || (t[c + 1].priority == t[c].priority && t[c + 1].request_id < t[c].request_id)))
-                c++;
-            swap_task(t, i, c);
-        }
+    while (c < N && (t[c].priority >= t[i].priority || t[c+1].priority >= t[i].priority)) {
+        if (c + 1 < N && (t[c + 1].priority > t[c].priority || (t[c + 1].priority == t[c].priority && t[c + 1].request_id < t[c].request_id)))
+            c++;
+        swap_task(t, i, c);
         i = c; 
         c = 2*i + 1;
     }
 }
 
-void initQueue(PriorityQueue q) {
+void initQueue() {
     q.size = 8;
     q.tasks = 0;
     q.task_data = malloc(sizeof(Task) * q.size);
 }
 
-void enqueue(PriorityQueue q, Task task) {
+void enqueue(Task task) {
     if (q.tasks == q.size) {
         q.size *= 2;
         q.task_data = realloc(q.task_data, sizeof(Task) * q.size);
@@ -47,7 +45,7 @@ void enqueue(PriorityQueue q, Task task) {
     q.tasks++;
 }
 
-Task dequeue(PriorityQueue q) {
+Task dequeue() {
     Task t = q.task_data[0];
     q.tasks--;
     swap_task(q.task_data, 0, q.tasks);
@@ -55,10 +53,10 @@ Task dequeue(PriorityQueue q) {
     return t;
 }
 
-int* peak_transformations(PriorityQueue q) {
+int* peak_transformations() {
     return q.task_data[0].transformations;
 }
 
-int isEmpty(PriorityQueue q) {
+int isEmpty() {
     return q.tasks == 0;
 }
