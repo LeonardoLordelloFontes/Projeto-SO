@@ -84,6 +84,7 @@ int main(int argc, char *argv[]) {
     max_runnable_transformations(argv[1]);
     mkfifo("server_client_fifo", 0666);
     char buffer[256];
+
     while (1) {
         int fd = open("server_client_fifo", O_RDONLY);
         int n = read_request(fd, buffer, 256);
