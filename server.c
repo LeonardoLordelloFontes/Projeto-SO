@@ -39,6 +39,15 @@ int check_transformations_availableness(int user_transformations[7]) {
     return available;
 }
 
+int accept_user_request(int user_transformations[7]) {
+    int accepted = 1;
+    for (int  i = 0; i < 7 && accepted; i++) {
+        if (user_transformations[i] > server_transformations[i][1])
+            accepted = 0;
+    }
+    return accepted;
+}
+
 // testado
 
 void max_runnable_transformations(char* config_path) {
@@ -62,12 +71,35 @@ void max_runnable_transformations(char* config_path) {
     }
 }
 
+ssize_t read_request(int fd, char* request, size_t size) {
+    ssize_t bytes_read = read(fd, request, size);
+    size_t request_size = strcspn(request, "\n") + 1;
+    request[request_size] = '\0';
+    lseek(fd, request_size - bytes_read, SEEK_CUR);
+    return request_size;
+}
+
 int main(int argc, char *argv[]) {
 
     max_runnable_transformations(argv[1]);
     mkfifo("server_client_fifo", 0666);
+    char buffer[256];
     while (1) {
-
+        int fd = open("server_client_fifo", O_RDONLY);
+        int n = read_request(fd, buffer, 256);
+        // int aux, n = 0;
+        // while ((aux = read_request(fd, buffer, 256)) > 0) n += aux;
+        close(fd);
+        long x;
+        for (int i = 0; i < 1000000000; i++)
+            x += i;
+        write(1, buffer, n);
+        // strncpy(user_request, buffer, n);
+        //write(1, user_request, n);
+        // if (n <= 255)
+        // write(1, buffer, n);
+        /*else
+            write(1, "arroz", 5);*/
     }
 
     /*
