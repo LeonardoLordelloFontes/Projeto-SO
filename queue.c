@@ -11,7 +11,7 @@ void swap_task(Task t[], int pos1, int pos2) {
 
 void bubbleUp (Task t[], int i) {
     int p = (i-1)/2;
-    while (i > 0 && t[i].priority > t[p].priority || (t[i].priority == t[p].priority && t[i].request_id < t[p].request_id)) {
+    while ((i > 0 && t[i].priority > t[p].priority) || (t[i].priority == t[p].priority && t[i].request_id < t[p].request_id)) {
         swap_task(t, i, p);
         i = p;
         p = (i-1)/2;
@@ -54,7 +54,10 @@ Task dequeue() {
 }
 
 int* peak_transformations() {
-    return q.task_data[0].transformations;
+    int *r = NULL;
+    if (!isEmpty())
+        r = q.task_data[0].transformations;
+    return r;
 }
 
 int isEmpty() {

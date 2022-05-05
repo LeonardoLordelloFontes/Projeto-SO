@@ -44,7 +44,7 @@ int get_task_priority(const char *request) {
     return priority;
 }
 
-int check_transformations_availableness(int user_transformations[7]) {
+int check_transformations_availableness(int* user_transformations) {
     int available = 1;
     for (int i = 0; i < 7 && available; i++) {
         if (server_transformations[i][0] + user_transformations[i] > server_transformations[i][1])
@@ -61,6 +61,21 @@ int accept_user_request(int user_transformations[7]) {
     }
     return accepted;
 }
+
+int skip_request_priority(char *request) {
+    char buffer[strlen(request) + 1];
+    strcpy(buffer, request);
+    int skip = 0;
+    char *token = strtok(buffer, " "); // proc-file
+    skip += strlen(token) + 1;
+    token = strtok(NULL, " "); // -p ou input
+    if (strcmp(token, "-p") == 0) {
+        skip += strlen(token) + 1;
+        token = strtok(NULL, " "); // priority
+        skip += strlen(token) + 1;
+    }
+    return skip;
+} 
 
 int skip_request_to_transformations(char *request) {
     char buffer[strlen(request) + 1];
@@ -92,30 +107,37 @@ void status_task() {
     // TODO
 }
 
-void process_transformations(char *transformations) {
+void process_transformations(char* request, char* request_pid, char* transformations_path) {
     pid_t pid = fork();
     if (pid == 0) {
+        int client_server_fd = open(request_pid, O_WRONLY);
+        write(client_server_fd, "concluded\n", 11);
+        close(client_server_fd);
+        
         // TODO
         _exit(1);
     }
 }
 
-void proc_file_task(char *request, int request_id, char *request_pid) {
+void proc_file_task(char *request, int request_id, char *request_pid, char* transformations_path) {
     Task task = {.transformations = {0}};
     fill_user_transformations(request, task.transformations);
     int client_server_fd = open(request_pid, O_WRONLY);
     if (client_server_fd == -1) {
         perror("open");
-        return 1;
+        _exit(1);
     }
     if (accept_user_request(task.transformations)) {
-        write(client_server_fd, "PENDING", 7);
-        close(client_server_fd);
+        write(client_server_fd, "pending\n", 9);
+        
         if (isEmpty()) {
-            int skip = skip_request_to_transformations(request);
-            process_transformations(request + skip);
+            write(client_server_fd, "processing\n", 12);
+            close(client_server_fd);
+            int skip = skip_request_priority(request);
+            process_transformations(request + skip, request_pid, transformations_path);
         }
         else {
+            close(client_server_fd);
             task.priority = get_task_priority(request);
             task.request_id = request_id;
             strcpy(task.request_pid, request_pid);
@@ -124,15 +146,12 @@ void proc_file_task(char *request, int request_id, char *request_pid) {
         }
     }
     else {
-        // PEDIDO RECUSADO
-        // ENVIAR MENSAGEM AO CLIENTE DIZENDO "DENIED"
-        write(1, "NO", 2); 
+        write(client_server_fd, "denied\n", 8);
+        close(client_server_fd);
     }
-
-    // olhar para o topo e dar dequeue enquanto estiver disponivel 
 }
 
-void select_task(char *request, int request_id) {
+void select_task(char *request, int request_id, char* transformations_path) {
     char buffer[strlen(request) + 1]; 
     strcpy(buffer, request);
     char *token = strtok(buffer, " ");
@@ -142,7 +161,7 @@ void select_task(char *request, int request_id) {
     token = strtok(NULL, " ");
 
     if (strcmp(token, "proc-file") == 0) {
-        proc_file_task(request + skip_pid, request_id, request_pid);
+        proc_file_task(request + skip_pid, request_id, request_pid, transformations_path);
     }
 
     else if (strcmp(token, "status") == 0) {
@@ -193,7 +212,13 @@ int main(int argc, char *argv[]) {
         int n = read_request(fd, request, 256);
         close(fd);
         requests++;
-        select_task(request, requests);
+        select_task(request, requests, argv[2]);
+        /*
+        while (check_transformations_availableness(peak_transformations())) {
+            Task task = dequeue();
+            int skip = skip_request_to_transformations(task.request);
+            process_transformations(task.request + skip, task.request_pid);
+        }*/
     }
     return 0;
 }

@@ -36,17 +36,18 @@ int main(int argc, char *argv[]) {
     write(fd, buffer, strlen(buffer) + 1);
     close(fd);
 
-    int client_server_fd = open(pid, O_RDONLY);
-
-    if (client_server_fd == -1) {
-        perror("open");
-        return 1;
+    char buffer2[64];
+    buffer[0] = '\0';
+    while(strcmp(buffer2, "concluded\n") != 0 && strcmp(buffer2, "denied\n") != 0) {
+        int client_server_fd = open(pid, O_RDONLY);
+        if (client_server_fd == -1) {
+            perror("open");
+            return 1;
+        }
+        int n = read(client_server_fd, buffer2, 64);
+        close(client_server_fd);
+        write(1, buffer2, n); 
     }
-
-    char buffer2[32];
-    int n = read(client_server_fd, buffer2, 32);
-    write(1, buffer2, n);
-    close(client_server_fd);
     unlink(pid);
     return 0;
 }
