@@ -175,6 +175,7 @@ void process_transformations(char* request, char* request_pid, char* transformat
         }
         else {
             wait(NULL); // colocar de forma concorrente depois
+            /*
             close(pipes[0][1]);
 
             char buffer[256];
@@ -182,7 +183,7 @@ void process_transformations(char* request, char* request_pid, char* transformat
             // Só para testar por enquanto
             while((n = read(pipes[0][0], buffer, 256)) > 0) {
                 write(1, buffer, n);
-            }
+            }*/
         }
         close(out_fd);
         /*
