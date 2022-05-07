@@ -97,8 +97,10 @@ int skip_request_to_transformations(char *request) {
 }
 
 void fill_user_transformations(char *request, int user_transformations[7]) {
+    char buffer[strlen(request)];
     int skip = skip_request_to_transformations(request);
-    for (char *token = strtok(request + skip, " "); token != NULL; token = strtok(NULL, " ")) {
+    strcpy(buffer, request + skip);
+    for (char *token = strtok(buffer, " "); token != NULL; token = strtok(NULL, " ")) {
         user_transformations[get_transformation_key(token)]++;
     }
 }
@@ -118,84 +120,60 @@ int get_number_of_transformations(int user_transformations[7]) {
 void process_transformations(char* request, char* request_pid, char* transformations_path, int number_of_transformations) {
     pid_t pid = fork();
     if (pid == 0) {
-        int pipes[number_of_transformations-1][2];
+        // write(1, request, strlen(request));
+        int pipes[number_of_transformations][2];
         char in[128], out[128];
         char *token = strtok(request, " ");
         strncpy(in, token, 128);
         token = strtok(NULL, " ");
         strncpy(out, token, 128);
-        int in_fd = open(in, O_RDONLY);
-        if (in_fd == -1) {
-            write(1, "NO", 2);
-            // alterar depois para n terminar o servidor
-            // enviar mensagem ao usuário denied?
-            perror("open");
-            _exit(1);
-        }
-        int n;
-        pipe(pipes[0]);
-        token = strtok(NULL, " ");
-        pid_t pid_transformation = fork();
-        if (pid_transformation == 0) {
-            close(pipes[0][0]);
-            write(1, "Yes", 3);
-            dup2(in_fd, 0);
-            dup2(pipes[0][1], 1);
-            char exec_transformation_path[256];
-            snprintf(exec_transformation_path, 256, "./%s/%s", transformations_path, token);
-            execlp(exec_transformation_path, exec_transformation_path, NULL);
-            perror("exec");
-            _exit(1);
-        }
-        else {
-            /*
-            wait(NULL); // colocar de forma concorrente depois
-            close(pipes[0][1]);
-
-            char buffer[256];
-            int n;
-            // Só para testar por enquanto
-            while((n = read(pipes[0][0], buffer, 256)) > 0) {
-                write(1, buffer, n);
-            }
-
-            // close(pipes[0][0]);*/
-        }
-
-        int out_fd = open(out, O_WRONLY);
-        pid_transformation = fork();
-        if (pid_transformation == 0) {
-            dup2(out_fd, 1);
-            dup2(pipes[0][0], 0);
-            char exec_transformation_path[256];
-            snprintf(exec_transformation_path, 256, "./%s/%s", transformations_path, token);
-            execlp(exec_transformation_path, exec_transformation_path, NULL);
-            perror("exec");
-            _exit(1);
-        }
-        else {
-            wait(NULL); // colocar de forma concorrente depois
-            /*
-            close(pipes[0][1]);
-
-            char buffer[256];
-            int n;
-            // Só para testar por enquanto
-            while((n = read(pipes[0][0], buffer, 256)) > 0) {
-                write(1, buffer, n);
-            }*/
-        }
-        close(out_fd);
-        /*
+        
         for (int i = 0; i < number_of_transformations; i++) {
+            token = strtok(NULL, " ");
+            // write(1, token, strlen(token));
+            int in_fd;
+            int out_fd;
+            pipe(pipes[i]);
+            if (i == 0) {
+                in_fd = open(in, O_RDONLY);
+                if (in_fd == -1) {
+                    write(1, "NO", 2);
+                    // alterar depois para n terminar o servidor
+                    // enviar mensagem ao usuário denied?
+                    perror("open");
+                    _exit(1);
+                }
+            }
+            else 
+                in_fd = pipes[i-1][0];
+            if (i == number_of_transformations - 1) {
+                out_fd = open(out, O_CREAT|O_TRUNC|O_WRONLY, 0666);
+                if (out_fd == -1) {
+                    write(1, "NO", 2);
+                    perror("open");
+                    _exit(1);
+                }
+            }
+            else 
+                out_fd = pipes[i][1];
             pid_t pid_transformation = fork();
             if (pid_transformation == 0) {
-                exit(1);
+                dup2(in_fd, 0);
+                dup2(out_fd, 1);
+                close(in_fd);
+                close(out_fd);
+                char exec_transformation_path[256];
+                snprintf(exec_transformation_path, 256, "./%s/%s", transformations_path, token);
+                execlp(exec_transformation_path, exec_transformation_path, NULL);
+                perror("exec");
+                _exit(1);
             }
             else {
-                
+                close(out_fd);
+                close(in_fd);
+                wait(NULL);
             }
-        }*/
+        }
 
         int client_server_fd = open(request_pid, O_WRONLY);
         write(client_server_fd, "concluded\n", 11);
@@ -245,7 +223,6 @@ void select_task(char *request, int request_id, char* transformations_path) {
     strcpy(request_pid, token);
     int skip_pid = strlen(token) + 1;
     token = strtok(NULL, " ");
-
     if (strcmp(token, "proc-file") == 0) {
         proc_file_task(request + skip_pid, request_id, request_pid, transformations_path);
     }
