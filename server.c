@@ -11,6 +11,7 @@
 #include "server.h"
 
 int server_transformations[7][2];
+RunningTasks running_tasks;
 
 /* Perfect Hash
     nop - 4
@@ -21,6 +22,42 @@ int server_transformations[7][2];
     encrypt - 3
     decrypt - 5
 */
+
+void add_running_task(Task task) {
+    RunningTasks new_node = malloc(sizeof(struct RunningTask));
+    new_node->task = task;
+    if (running_tasks == NULL) {
+        new_node->next = NULL;
+        running_tasks = new_node;
+    }
+    else {
+        new_node->next = running_tasks;
+        running_tasks = new_node;
+    }
+}
+
+void remove_running_task(char *pid) {
+    RunningTasks aux;
+    if (pid == running_tasks->task.request_pid) {
+        aux = running_tasks;
+        running_tasks = running_tasks->next;
+        free(aux);
+    }
+    else {
+        RunningTasks last;
+        for (aux = running_tasks; aux != NULL && aux->task.request_pid != pid; aux = aux->next)
+            last = aux;
+        if (aux == NULL) {
+            aux = last;
+            last = NULL;
+            free(aux);
+        }
+        else {
+            last->next = aux->next;
+            free(aux);
+        }
+    }
+}
 
 int get_transformation_key(char* str) {
     int key = (str[0] + str[1]) % 7;
@@ -106,7 +143,11 @@ void fill_user_transformations(char *request, int user_transformations[7]) {
 }
 
 void status_task() {
-    // TODO
+    for (RunningTasks aux = running_tasks; aux != NULL; aux = aux->next) {
+        char buffer[512];
+        snprintf(buffer, 512, "task #%d: %s\n", aux->task.request_id, aux->task.request);
+        write(1, buffer, strlen(buffer));
+    }
 }
 
 int get_number_of_transformations(int user_transformations[7]) {
@@ -119,6 +160,9 @@ int get_number_of_transformations(int user_transformations[7]) {
 
 void process_transformations(char* request, char* request_pid, char* transformations_path, int number_of_transformations) {
     pid_t pid = fork();
+    if (pid == -1) {
+        perror("fork");
+    }
     if (pid == 0) {
         // write(1, request, strlen(request));
         int pipes[number_of_transformations][2];
@@ -133,7 +177,6 @@ void process_transformations(char* request, char* request_pid, char* transformat
             // write(1, token, strlen(token));
             int in_fd;
             int out_fd;
-            pipe(pipes[i]);
             if (i == 0) {
                 in_fd = open(in, O_RDONLY);
                 if (in_fd == -1) {
@@ -154,8 +197,10 @@ void process_transformations(char* request, char* request_pid, char* transformat
                     _exit(1);
                 }
             }
-            else 
+            else {
+                pipe(pipes[i]);
                 out_fd = pipes[i][1];
+            }
             pid_t pid_transformation = fork();
             if (pid_transformation == 0) {
                 dup2(in_fd, 0);
@@ -169,9 +214,9 @@ void process_transformations(char* request, char* request_pid, char* transformat
                 _exit(1);
             }
             else {
+                wait(NULL);
                 close(out_fd);
                 close(in_fd);
-                wait(NULL);
             }
         }
 
@@ -185,33 +230,35 @@ void process_transformations(char* request, char* request_pid, char* transformat
 void proc_file_task(char *request, int request_id, char *request_pid, char* transformations_path) {
     Task task = {.transformations = {0}};
     fill_user_transformations(request, task.transformations);
-    int client_server_fd = open(request_pid, O_WRONLY);
+    /* int client_server_fd = open(request_pid, O_WRONLY);
     if (client_server_fd == -1) {
         perror("open");
         _exit(1);
-    }
+    }*/
     if (accept_user_request(task.transformations)) {
-        write(client_server_fd, "pending\n", 9);
-        
+        // write(client_server_fd, "pending\n", 9);
+        task.priority = get_task_priority(request);
+        task.request_id = request_id;
+        strcpy(task.request_pid, request_pid);
+        strcpy(task.request, request);
+
         if (isEmpty()) {
-            write(client_server_fd, "processing\n", 12);
-            close(client_server_fd);
+            // TODO - colocar as transformações em utilização
+            // write(client_server_fd, "processing\n", 12);
+            // close(client_server_fd);
             int skip = skip_request_priority(request);
             int number_of_transformations = get_number_of_transformations(task.transformations);
+            add_running_task(task);
             process_transformations(request + skip, request_pid, transformations_path, number_of_transformations);
         }
         else {
-            close(client_server_fd);
-            task.priority = get_task_priority(request);
-            task.request_id = request_id;
-            strcpy(task.request_pid, request_pid);
-            strcpy(task.request, request);
+            // close(client_server_fd);
             enqueue(task);
         }
     }
     else {
-        write(client_server_fd, "denied\n", 8);
-        close(client_server_fd);
+        // write(client_server_fd, "denied\n", 8);
+        // close(client_server_fd);
     }
 }
 
@@ -268,20 +315,16 @@ int main(int argc, char *argv[]) {
     max_runnable_transformations(argv[1]);
     mkfifo("server_client_fifo", 0666);
     initQueue();
+    running_tasks = NULL;
     char request[256];
     int requests = 0;
     while (1) {
+        write(1, "ab", 2);
         int fd = open("server_client_fifo", O_RDONLY);
         int n = read_request(fd, request, 256);
         close(fd);
         requests++;
         select_task(request, requests, argv[2]);
-        /*
-        while (check_transformations_availableness(peak_transformations())) {
-            Task task = dequeue();
-            int skip = skip_request_to_transformations(task.request);
-            process_transformations(task.request + skip, task.request_pid);
-        }*/
     }
     return 0;
 }

@@ -4,4 +4,9 @@
 
 PriorityQueue q;
 
+typedef struct RunningTask {
+    Task task;
+    struct RunningTask *next;
+} *RunningTasks; 
+
 #endif
