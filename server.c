@@ -13,15 +13,18 @@
 int server_transformations[7][2];
 RunningTasks running_tasks;
 
-/* Perfect Hash
-    nop - 4
-    bcompress - 1
-    bdecompress - 2
-    gcompress - 6
-    gdecompress - 0
-    encrypt - 3
-    decrypt - 5
-*/
+void sigchld_handler(int sig) {
+    int status;
+    wait(&status);
+    if (!WIFEXITED(status))
+        return;
+    if (WEXITSTATUS(status) == 0) {
+        // TODO
+    }
+    else {
+        // TODO
+    }
+}
 
 void add_running_task(Task task) {
     RunningTasks new_node = malloc(sizeof(struct RunningTask));
@@ -58,6 +61,16 @@ void remove_running_task(char *pid) {
         }
     }
 }
+
+/* Perfect Hash
+    nop - 4
+    bcompress - 1
+    bdecompress - 2
+    gcompress - 6
+    gdecompress - 0
+    encrypt - 3
+    decrypt - 5
+*/
 
 int get_transformation_key(char* str) {
     int key = (str[0] + str[1]) % 7;
@@ -162,6 +175,7 @@ void process_transformations(char* request, char* request_pid, char* transformat
     pid_t pid = fork();
     if (pid == -1) {
         perror("fork");
+        // enviar mensagem ao cliente dizendo que falhou
     }
     if (pid == 0) {
         // write(1, request, strlen(request));
@@ -172,11 +186,12 @@ void process_transformations(char* request, char* request_pid, char* transformat
         token = strtok(NULL, " ");
         strncpy(out, token, 128);
         
+        int in_fd;
+        int out_fd;
+
         for (int i = 0; i < number_of_transformations; i++) {
             token = strtok(NULL, " ");
             // write(1, token, strlen(token));
-            int in_fd;
-            int out_fd;
             if (i == 0) {
                 in_fd = open(in, O_RDONLY);
                 if (in_fd == -1) {
@@ -204,8 +219,8 @@ void process_transformations(char* request, char* request_pid, char* transformat
             pid_t pid_transformation = fork();
             if (pid_transformation == 0) {
                 dup2(in_fd, 0);
-                dup2(out_fd, 1);
                 close(in_fd);
+                dup2(out_fd, 1);
                 close(out_fd);
                 char exec_transformation_path[256];
                 snprintf(exec_transformation_path, 256, "./%s/%s", transformations_path, token);
@@ -220,9 +235,9 @@ void process_transformations(char* request, char* request_pid, char* transformat
             }
         }
 
-        int client_server_fd = open(request_pid, O_WRONLY);
-        write(client_server_fd, "concluded\n", 11);
-        close(client_server_fd);
+        // int client_server_fd = open(request_pid, O_WRONLY);
+        // write(client_server_fd, "concluded\n", 11);
+        // close(client_server_fd);
         _exit(0);
     }
 }
@@ -314,6 +329,7 @@ ssize_t read_request(int fd, char* request, size_t size) {
 int main(int argc, char *argv[]) {
     max_runnable_transformations(argv[1]);
     mkfifo("server_client_fifo", 0666);
+    signal(SIGCHLD, sigchld_handler);
     initQueue();
     running_tasks = NULL;
     char request[256];
