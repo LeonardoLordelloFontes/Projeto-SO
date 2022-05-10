@@ -6,7 +6,8 @@ typedef struct {
     char request[256];
     int priority;
     int request_id;
-    char request_pid[16];
+    int request_fd;
+    pid_t child_process;
 } Task;
 
 typedef struct {

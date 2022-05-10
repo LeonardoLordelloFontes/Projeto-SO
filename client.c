@@ -35,19 +35,11 @@ int main(int argc, char *argv[]) {
     strcat(buffer, "\n");
     write(fd, buffer, strlen(buffer) + 1);
     close(fd);
-    /*
-    char buffer2[64];
-    buffer[0] = '\0';
-    while(strcmp(buffer2, "concluded\n") != 0 && strcmp(buffer2, "denied\n") != 0) {
-        int client_server_fd = open(pid, O_RDONLY);
-        if (client_server_fd == -1) {
-            perror("open");
-            return 1;
-        }
-        int n = read(client_server_fd, buffer2, 64);
-        close(client_server_fd);
-        write(1, buffer2, n); 
-    }*/
+    fd = open(pid, O_RDONLY);
+    int n;
+    while ((n = read(fd, buffer, 256)) > 0)
+        write(1, buffer, n);
+    close(fd);
     unlink(pid);
     return 0;
 }
