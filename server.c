@@ -38,28 +38,42 @@ Task remove_running_task(pid_t pid) {
     return task;
 }
 
+int get_file_size(char *path) {
+    struct stat st;
+    stat(path, &st);
+    return st.st_size;
+}
+
 void sigchld_handler(int sig) {
     int status;
-    pid_t pid = wait(&status);
-    Task task = remove_running_task(pid);
-    remove_user_transformations(task.transformations);
+    pid_t pid;
     
-    if (!WIFEXITED(status))
-        return;
-    
-    if (WEXITSTATUS(status) == 0) {
-        write(task.request_fd, "concluded\n", 11);
-        close(task.request_fd);
-        while (peak_transformations() != NULL && check_transformations_availableness(peak_transformations())) {
-            task = dequeue();
-            int number_of_transformations = get_number_of_transformations(task.transformations);
-            process_transformations(task, number_of_transformations);
+    while ((pid = waitpid(-1, &status, WNOHANG)) > 0) {
+        Task task = remove_running_task(pid);
+        remove_user_transformations(task.transformations);
+        if (WEXITSTATUS(status) == 0) {
+            char in[128], out[128], buffer[128];
+            get_input_output(task.request, in, out);
+            int in_size = get_file_size(in);
+            int out_size = get_file_size(out);
+            int n = snprintf(buffer, 128, "concluded (bytes input: %d, bytes output: %d)\n", in_size, out_size);
+            write(task.request_fd, buffer, n);
+            close(task.request_fd);
+            while (peak_transformations() != NULL && check_transformations_availableness(peak_transformations())) {
+                task = dequeue();
+                int number_of_transformations = get_number_of_transformations(task.transformations);
+                process_transformations(task, number_of_transformations);
+            }
+        }
+        else {
+            write(task.request_fd, "something went wrong\n", 22);
+            close(task.request_fd);
         }
     }
-    else {
-        write(task.request_fd, "something went wrong\n", 22);
-        close(task.request_fd);
-    }
+}
+
+void sigterm_handler(int sig) {
+    // TODO
 }
 
 void add_running_task(Task task) {
@@ -206,6 +220,16 @@ int get_number_of_transformations(int user_transformations[7]) {
     return transformations;
 }
 
+void get_input_output(char *request, char *input, char *output) {
+    int skip = skip_request_priority(request);
+    char buffer[strlen(request)+1];
+    strcpy(buffer, request+skip);
+    char *token = strtok(buffer, " ");
+    strncpy(input, token, 128);
+    token = strtok(NULL, " ");
+    strncpy(output, token, 128);
+}
+
 void process_transformations(Task task, int number_of_transformations) {
     pid_t pid = fork();
     if (pid == -1) {
@@ -213,26 +237,20 @@ void process_transformations(Task task, int number_of_transformations) {
         // enviar mensagem ao cliente dizendo que falhou
     }
     if (pid == 0) {
-        sleep(5);
-        // write(1, request, strlen(request));
         int pipes[number_of_transformations][2];
-        // write(1, task.request, strlen(task.request));
-        int skip = skip_request_priority(task.request);
-        char buffer[strlen(task.request)+1];
-        strcpy(buffer, task.request+skip);
         char in[128], out[128];
-        char *token = strtok(buffer, " ");
-        // write(1, token, strlen(token));
-        strncpy(in, token, 128);
-        token = strtok(NULL, " ");
-        // write(1, token, strlen(token));
-        strncpy(out, token, 128);
+        get_input_output(task.request, in, out);
+        char buffer[strlen(task.request)+1];
+        int skip = skip_request_priority(task.request);
+        strcpy(buffer, task.request+skip);
+        strtok(buffer, " ");
+        strtok(NULL, " ");
         
         int in_fd;
         int out_fd;
 
         for (int i = 0; i < number_of_transformations; i++) {
-            token = strtok(NULL, " ");
+            char *token = strtok(NULL, " ");
 
             if (i == 0) {
                 in_fd = open(in, O_RDONLY);
@@ -271,6 +289,8 @@ void process_transformations(Task task, int number_of_transformations) {
                 close(in_fd);
             }
         }
+        alarm(1);
+        pause();
         _exit(0);
     }
     else {
@@ -362,6 +382,7 @@ int main(int argc, char *argv[]) {
     strcpy(transformations_path, argv[2]);
     mkfifo("server_client_fifo", 0666);
     signal(SIGCHLD, sigchld_handler);
+    signal(SIGTERM, sigterm_handler);
     initQueue();
     running_tasks = NULL;
     char request[256];
