@@ -238,6 +238,7 @@ void process_transformations(Task task, int number_of_transformations) {
     }
     if (pid == 0) {
         int pipes[number_of_transformations][2];
+        pid_t transformation_pids[number_of_transformations];
         char in[128], out[128];
         get_input_output(task.request, in, out);
         char buffer[strlen(task.request)+1];
@@ -285,12 +286,14 @@ void process_transformations(Task task, int number_of_transformations) {
                 _exit(1);
             }
             else {
+                transformation_pids[i] = pid_transformation;
                 close(out_fd);
                 close(in_fd);
             }
         }
-        alarm(1);
-        pause();
+        for (int i = 0; i < number_of_transformations; i++) {
+            waitpid(transformation_pids[i], NULL, 0);
+        }
         _exit(0);
     }
     else {
