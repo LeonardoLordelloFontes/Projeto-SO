@@ -73,7 +73,10 @@ void sigchld_handler(int sig) {
 }
 
 void sigterm_handler(int sig) {
-    // TODO
+    while(!isEmpty() || running_tasks != NULL) {
+        pause();
+    }
+    _exit(0);
 }
 
 void add_running_task(Task task) {
@@ -237,6 +240,7 @@ void process_transformations(Task task, int number_of_transformations) {
         // enviar mensagem ao cliente dizendo que falhou
     }
     if (pid == 0) {
+        sleep(5);
         int pipes[number_of_transformations][2];
         pid_t transformation_pids[number_of_transformations];
         char in[128], out[128];
