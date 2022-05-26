@@ -240,7 +240,6 @@ void process_transformations(Task task, int number_of_transformations) {
         // enviar mensagem ao cliente dizendo que falhou
     }
     if (pid == 0) {
-        sleep(5);
         int pipes[number_of_transformations][2];
         pid_t transformation_pids[number_of_transformations];
         char in[128], out[128];
@@ -328,7 +327,6 @@ void proc_file_task(char *request, int request_id, char *request_pid) {
             process_transformations(task, number_of_transformations);
         }
         else {
-            write(1, "enqueue\n", 9);
             enqueue(task);
         }
     }
