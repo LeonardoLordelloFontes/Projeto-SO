@@ -237,7 +237,6 @@ void process_transformations(Task task, int number_of_transformations) {
     pid_t pid = fork();
     if (pid == -1) {
         perror("fork");
-        // enviar mensagem ao cliente dizendo que falhou
     }
     if (pid == 0) {
         int pipes[number_of_transformations][2];
